@@ -291,6 +291,53 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 - **Tavily** - AI-optimized web search API
 - **Streamlit** - Rapid web app development framework
 
+## ☁️ Deploy to Streamlit Cloud
+
+The easiest way to share your research app is to deploy it on **Streamlit Community Cloud** (free):
+
+### 1. Push to GitHub
+
+```bash
+git add .
+git commit -m "Ready for deployment"
+git push origin main
+```
+
+### 2. Deploy on Streamlit Cloud
+
+1. Go to [share.streamlit.io](https://share.streamlit.io)
+2. Sign in with your GitHub account
+3. Click **"New app"**
+4. Select:
+   - **Repository**: `your-username/ai-research-agent`
+   - **Branch**: `main`
+   - **Main file path**: `app.py`
+
+### 3. Configure Secrets
+
+In the deployment settings, click **"Advanced settings"** → **"Secrets"** and add:
+
+```toml
+ANTHROPIC_API_KEY = "your_anthropic_key_here"
+TAVILY_API_KEY = "your_tavily_key_here"
+
+# Optional: Override model settings
+CLAUDE_MODEL = "claude-3-haiku-20240307"
+```
+
+### 4. Deploy!
+
+Click **"Deploy"** and you'll get a shareable URL like:
+```
+https://your-username-ai-research-agent-app-xxxxx.streamlit.app
+```
+
+### Notes on Secrets
+
+- The app automatically detects Streamlit Cloud and reads from `st.secrets`
+- For local development, continue using your `.env` file
+- Never commit your `.env` file (it's already in `.gitignore`)
+
 ## 📧 Support
 
 If you encounter any issues or have questions:

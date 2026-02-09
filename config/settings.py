@@ -1,6 +1,7 @@
 """
 Configuration management using pydantic-settings.
 Loads configuration from environment variables and .env file.
+For Streamlit Cloud, secrets are loaded in app.py before importing this module.
 """
 
 from pydantic_settings import BaseSettings

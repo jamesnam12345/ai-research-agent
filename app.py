@@ -4,7 +4,19 @@ Multi-Agent Research System - Chat Interface
 A clean, chat-style research application with three AI agents.
 """
 
+import os
 import streamlit as st
+
+# Load Streamlit secrets into environment variables (for Streamlit Cloud)
+# This must happen before importing other modules that use settings
+try:
+    if hasattr(st, 'secrets'):
+        for key in st.secrets:
+            os.environ[key] = str(st.secrets[key])
+except (FileNotFoundError, AttributeError):
+    # No secrets file - using .env for local development
+    pass
+
 from datetime import datetime
 from src.graph.workflow import create_research_workflow
 from src.graph.state import ResearchState
@@ -119,24 +131,11 @@ st.markdown("""
         padding: 1rem;
     }
 
-    /* Center button container */
-    .button-container {
-        display: flex;
-        justify-content: center;
-        gap: 0.5rem;
-        margin-top: 1rem;
-    }
-
     /* Make Go button bigger */
     button[kind="primary"] {
         font-size: 1.1rem !important;
         padding: 0.75rem 2rem !important;
         font-weight: 600 !important;
-    }
-
-    /* Remove border from popover button */
-    button[data-testid="baseButton-secondary"] {
-        border: none !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -144,9 +143,6 @@ st.markdown("""
 # Initialize session state
 if 'messages' not in st.session_state:
     st.session_state.messages = []
-
-if 'processing' not in st.session_state:
-    st.session_state.processing = False
 
 if 'workflow' not in st.session_state:
     try:
@@ -171,15 +167,12 @@ if 'quality_threshold' not in st.session_state:
 if 'selected_model' not in st.session_state:
     st.session_state.selected_model = settings.CLAUDE_MODEL
 
-if 'workflow_started' not in st.session_state:
-    st.session_state.workflow_started = False
-
-# Always show title and subtitle at top
+# Title and subtitle
 st.markdown('<h1 class="main-title">Multi-Agent Research System</h1>', unsafe_allow_html=True)
 st.markdown('<p class="subtitle">Research any topic of your interest with the help of three specialized agents (researcher, writer, editor)</p>', unsafe_allow_html=True)
 st.markdown("<br>", unsafe_allow_html=True)
 
-# Show configuration panel if toggled (before input)
+# Configuration panel (before input)
 if st.session_state.show_config:
     with st.container():
         st.markdown("**⚙️ Configuration**")
@@ -223,13 +216,12 @@ if st.session_state.show_config:
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-# Input area - show this BEFORE messages
+# Input form
 with st.form(key='research_form', clear_on_submit=False):
     user_input = st.text_area(
         "Research Topic",
         placeholder="Enter your research topic (e.g., 'Latest developments in quantum computing')",
         height=100,
-        disabled=st.session_state.processing,
         label_visibility="collapsed"
     )
 
@@ -239,94 +231,17 @@ with st.form(key='research_form', clear_on_submit=False):
     with col1:
         config_button = st.form_submit_button(
             "⚙️",
-            help="Configuration",
-            disabled=st.session_state.processing
+            help="Configuration"
         )
 
     with col3:
         submit_button = st.form_submit_button(
             "Go",
             type="primary",
-            disabled=st.session_state.processing,
             use_container_width=True
         )
 
 st.markdown("<br>", unsafe_allow_html=True)
-
-# Show prominent running indicator when processing
-if st.session_state.processing:
-    st.markdown("""
-    <div style="text-align: center; padding: 1.5rem; background: linear-gradient(90deg, #e3f2fd 0%, #f3e5f5 50%, #fff3e0 100%); border-radius: 0.5rem; margin-bottom: 1rem;">
-        <div style="font-size: 1.2rem; font-weight: 600; color: #1976d2; margin-bottom: 0.5rem;">
-            🔄 RUNNING
-        </div>
-        <div style="color: #666; font-size: 0.9rem;">
-            Multi-agent research in progress... Please wait.
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
-# Display chat messages with expandable details (AFTER input)
-if len(st.session_state.messages) > 0:
-    st.markdown("---")
-    st.markdown("### 💬 Conversation History")
-    st.markdown("<br>", unsafe_allow_html=True)
-
-for idx, message in enumerate(st.session_state.messages):
-    role = message['role']
-    content = message['content']
-    timestamp = message.get('timestamp', '')
-    time_str = datetime.fromisoformat(timestamp).strftime('%I:%M:%S %p') if timestamp else ''
-
-    # Message styling based on role
-    if role == 'user':
-        message_class = 'user-message'
-        agent_icon = '👤 You'
-    elif role == 'researcher':
-        message_class = 'researcher-message'
-        agent_icon = '🔍 Researcher'
-    elif role == 'writer':
-        message_class = 'writer-message'
-        agent_icon = '✍️ Writer'
-    elif role == 'editor':
-        message_class = 'editor-message'
-        agent_icon = '✏️ Editor'
-    else:
-        message_class = 'user-message'
-        agent_icon = role
-
-    # Check if message has expandable content
-    has_details = message.get('details') or message.get('full_content')
-
-    # Create message bubble - all content must be rendered as a single block
-    st.markdown(f"""
-    <div class="chat-message {message_class}">
-        <div class="agent-name">{agent_icon} <span style="color: #999; font-size: 0.75rem; font-weight: normal;">{time_str}</span></div>
-        <div class="message-content">
-            {content}
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    # Expandable details rendered separately (outside the bubble for proper Streamlit widget support)
-    if has_details or message.get('is_final'):
-        with st.expander("📄 View full content", expanded=message.get('is_final', False)):
-            st.markdown(message.get('full_content', content))
-
-            # Show additional details if available
-            if message.get('details'):
-                st.markdown("---")
-                st.markdown(message['details'])
-
-        # If this is the final message with a report, add download button
-        if message.get('is_final') and message.get('report_content'):
-            st.download_button(
-                label="📥 Download Report",
-                data=message['report_content'],
-                file_name=f"research_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md",
-                mime="text/markdown",
-                key=f"download_{idx}"
-            )
 
 # Handle config button
 if config_button:
@@ -334,10 +249,7 @@ if config_button:
     st.rerun()
 
 # Process research request
-if submit_button and user_input and not st.session_state.processing:
-    st.session_state.processing = True
-    st.session_state.workflow_started = False
-
+if submit_button and user_input:
     # Add user message
     st.session_state.messages.append({
         'role': 'user',
@@ -345,170 +257,221 @@ if submit_button and user_input and not st.session_state.processing:
         'timestamp': datetime.now().isoformat()
     })
 
-    # Force UI refresh to show user message and disabled inputs
-    st.rerun()
+    # Show loading indicator
+    with st.spinner("🔄 Multi-agent research in progress... Please wait."):
+        # Update settings with selected model
+        os.environ['CLAUDE_MODEL'] = st.session_state.selected_model
 
-# Continue workflow if processing and not already started
-if st.session_state.processing and not st.session_state.workflow_started and len(st.session_state.messages) > 0:
-    st.session_state.workflow_started = True
-    # Get the user's topic from the last user message
-    user_message = [m for m in st.session_state.messages if m['role'] == 'user'][-1]
-    user_input = user_message['content']
+        # Initialize state
+        initial_state: ResearchState = {
+            "topic": user_input,
+            "search_queries": [],
+            "search_results": [],
+            "research_notes": "",
+            "draft_report": "",
+            "draft_version": 0,
+            "final_report": "",
+            "editor_feedback": "",
+            "quality_score": 0.0,
+            "current_stage": "research",
+            "iteration_count": 0,
+            "max_iterations": st.session_state.max_iterations,
+            "quality_threshold": st.session_state.quality_threshold,
+            "requires_revision": False,
+            "messages": [],
+            "timestamp": datetime.now().isoformat(),
+            "error": None
+        }
 
-    # Update settings with selected model
-    import os
-    os.environ['CLAUDE_MODEL'] = st.session_state.selected_model
+        # Execute workflow
+        workflow = st.session_state.workflow
 
-    # Initialize state
-    initial_state: ResearchState = {
-        "topic": user_input,
-        "search_queries": [],
-        "search_results": [],
-        "research_notes": "",
-        "draft_report": "",
-        "draft_version": 0,
-        "final_report": "",
-        "editor_feedback": "",
-        "quality_score": 0.0,
-        "current_stage": "research",
-        "iteration_count": 0,
-        "max_iterations": st.session_state.max_iterations,
-        "quality_threshold": st.session_state.quality_threshold,
-        "requires_revision": False,
-        "messages": [],
-        "timestamp": datetime.now().isoformat(),
-        "error": None
-    }
+        if workflow is None:
+            st.error("Workflow not initialized. Please refresh the page.")
+        else:
+            try:
+                # Track which agents have reported and store messages
+                agents_reported = set()
+                pending_messages = []
 
-    # Execute workflow
-    workflow = st.session_state.workflow
+                # Stream workflow execution
+                for event in workflow.stream(initial_state):
+                    for node_name, node_state in event.items():
+                        if isinstance(node_state, dict):
+                            stage = node_state.get('current_stage', 'research')
 
-    if workflow is None:
-        st.error("Workflow not initialized. Please refresh the page.")
-        st.session_state.processing = False
-    else:
-        try:
-            # Track which agents have reported and store messages to add after completion
-            agents_reported = set()
-            pending_messages = []
-
-            # Stream workflow execution
-            for event in workflow.stream(initial_state):
-                for node_name, node_state in event.items():
-                    if isinstance(node_state, dict):
-                        stage = node_state.get('current_stage', 'research')
-
-                        # Researcher agent messages
-                        if node_name == 'researcher':
-                            if 'researcher_start' not in agents_reported:
-                                pending_messages.append({
-                                    'role': 'researcher',
-                                    'content': '🔍 Starting web research...',
-                                    'timestamp': datetime.now().isoformat()
-                                })
-                                agents_reported.add('researcher_start')
-
-                            if 'researcher_complete' not in agents_reported:
-                                queries = len(node_state.get('search_queries', []))
-                                results = len(node_state.get('search_results', []))
-                                notes = node_state.get('research_notes', '')
-
-                                pending_messages.append({
-                                    'role': 'researcher',
-                                    'content': f'✅ Research complete! Found {results} sources from {queries} queries.',
-                                    'timestamp': datetime.now().isoformat(),
-                                    'details': f"**Research Notes:**\n\n{notes[:500]}..." if len(notes) > 500 else notes,
-                                    'full_content': notes
-                                })
-                                agents_reported.add('researcher_complete')
-
-                        # Writer agent messages
-                        elif node_name == 'writer':
-                            version = node_state.get('draft_version', 0)
-
-                            if f'writer_start_{version}' not in agents_reported:
-                                pending_messages.append({
-                                    'role': 'writer',
-                                    'content': f'✍️ Writing report (version {version})...',
-                                    'timestamp': datetime.now().isoformat()
-                                })
-                                agents_reported.add(f'writer_start_{version}')
-
-                            if f'writer_complete_{version}' not in agents_reported and node_state.get('draft_report'):
-                                draft = node_state.get('draft_report', '')
-
-                                pending_messages.append({
-                                    'role': 'writer',
-                                    'content': f'✅ Draft version {version} complete!',
-                                    'timestamp': datetime.now().isoformat(),
-                                    'details': f"**Draft Report:**\n\n{draft[:500]}..." if len(draft) > 500 else draft,
-                                    'full_content': draft
-                                })
-                                agents_reported.add(f'writer_complete_{version}')
-
-                        # Editor agent messages
-                        elif node_name == 'editor':
-                            if 'editor_reviewing' not in agents_reported:
-                                pending_messages.append({
-                                    'role': 'editor',
-                                    'content': '✏️ Reviewing report quality...',
-                                    'timestamp': datetime.now().isoformat()
-                                })
-                                agents_reported.add('editor_reviewing')
-
-                            if node_state.get('requires_revision'):
-                                iteration = node_state.get('iteration_count', 0)
-                                score = node_state.get('quality_score', 0)
-                                feedback = node_state.get('editor_feedback', '')
-
-                                pending_messages.append({
-                                    'role': 'editor',
-                                    'content': f'🔄 Requesting revision (iteration {iteration}/{st.session_state.max_iterations})',
-                                    'timestamp': datetime.now().isoformat(),
-                                    'details': f"**Quality Score:** {score:.2f}\n\n**Feedback:**\n{feedback}"
-                                })
-                                agents_reported.remove('editor_reviewing')  # Allow editor to send another message
-
-                            elif stage == 'complete':
-                                # Final report ready
-                                final_report = node_state.get('final_report', '')
-                                score = node_state.get('quality_score', 0)
-
-                                if final_report:
+                            # Researcher agent messages
+                            if node_name == 'researcher':
+                                if 'researcher_start' not in agents_reported:
                                     pending_messages.append({
-                                        'role': 'editor',
-                                        'content': f'✅ Research Complete! Quality score: {score:.2f}',
-                                        'timestamp': datetime.now().isoformat(),
-                                        'is_final': True,
-                                        'full_content': final_report,
-                                        'report_content': final_report
-                                    })
-                                else:
-                                    pending_messages.append({
-                                        'role': 'editor',
-                                        'content': f'⚠️ Research completed but report content is empty. Quality score: {score:.2f}',
+                                        'role': 'researcher',
+                                        'content': '🔍 Starting web research...',
                                         'timestamp': datetime.now().isoformat()
                                     })
+                                    agents_reported.add('researcher_start')
 
-            # Add all pending messages to session state
-            st.session_state.messages.extend(pending_messages)
+                                if 'researcher_complete' not in agents_reported:
+                                    queries = len(node_state.get('search_queries', []))
+                                    results = len(node_state.get('search_results', []))
+                                    notes = node_state.get('research_notes', '')
 
-            logger.info("Research workflow completed successfully")
+                                    pending_messages.append({
+                                        'role': 'researcher',
+                                        'content': f'✅ Research complete! Found {results} sources from {queries} queries.',
+                                        'timestamp': datetime.now().isoformat(),
+                                        'details': f"**Research Notes:**\n\n{notes[:500]}..." if len(notes) > 500 else notes,
+                                        'full_content': notes
+                                    })
+                                    agents_reported.add('researcher_complete')
 
-        except Exception as e:
-            logger.exception("Workflow execution failed")
-            st.session_state.messages.append({
-                'role': 'editor',
-                'content': f"❌ Error during research: {str(e)}",
-                'timestamp': datetime.now().isoformat()
-            })
+                            # Writer agent messages
+                            elif node_name == 'writer':
+                                version = node_state.get('draft_version', 0)
 
-    st.session_state.processing = False
+                                if f'writer_start_{version}' not in agents_reported:
+                                    pending_messages.append({
+                                        'role': 'writer',
+                                        'content': f'✍️ Writing report (version {version})...',
+                                        'timestamp': datetime.now().isoformat()
+                                    })
+                                    agents_reported.add(f'writer_start_{version}')
+
+                                if f'writer_complete_{version}' not in agents_reported and node_state.get('draft_report'):
+                                    draft = node_state.get('draft_report', '')
+
+                                    pending_messages.append({
+                                        'role': 'writer',
+                                        'content': f'✅ Draft version {version} complete!',
+                                        'timestamp': datetime.now().isoformat(),
+                                        'details': f"**Draft Report:**\n\n{draft[:500]}..." if len(draft) > 500 else draft,
+                                        'full_content': draft
+                                    })
+                                    agents_reported.add(f'writer_complete_{version}')
+
+                            # Editor agent messages
+                            elif node_name == 'editor':
+                                if 'editor_reviewing' not in agents_reported:
+                                    pending_messages.append({
+                                        'role': 'editor',
+                                        'content': '✏️ Reviewing report quality...',
+                                        'timestamp': datetime.now().isoformat()
+                                    })
+                                    agents_reported.add('editor_reviewing')
+
+                                if node_state.get('requires_revision'):
+                                    iteration = node_state.get('iteration_count', 0)
+                                    score = node_state.get('quality_score', 0)
+                                    feedback = node_state.get('editor_feedback', '')
+
+                                    pending_messages.append({
+                                        'role': 'editor',
+                                        'content': f'🔄 Requesting revision (iteration {iteration}/{st.session_state.max_iterations})',
+                                        'timestamp': datetime.now().isoformat(),
+                                        'details': f"**Quality Score:** {score:.2f}\n\n**Feedback:**\n{feedback}"
+                                    })
+                                    agents_reported.remove('editor_reviewing')  # Allow editor to send another message
+
+                                elif stage == 'complete':
+                                    # Final report ready
+                                    final_report = node_state.get('final_report', '')
+                                    score = node_state.get('quality_score', 0)
+
+                                    if final_report:
+                                        pending_messages.append({
+                                            'role': 'editor',
+                                            'content': f'✅ Research Complete! Quality score: {score:.2f}',
+                                            'timestamp': datetime.now().isoformat(),
+                                            'is_final': True,
+                                            'full_content': final_report,
+                                            'report_content': final_report
+                                        })
+                                    else:
+                                        pending_messages.append({
+                                            'role': 'editor',
+                                            'content': f'⚠️ Research completed but report content is empty. Quality score: {score:.2f}',
+                                            'timestamp': datetime.now().isoformat()
+                                        })
+
+                # Add all pending messages to session state
+                st.session_state.messages.extend(pending_messages)
+
+                logger.info("Research workflow completed successfully")
+
+            except Exception as e:
+                logger.exception("Workflow execution failed")
+                st.session_state.messages.append({
+                    'role': 'editor',
+                    'content': f"❌ Error during research: {str(e)}",
+                    'timestamp': datetime.now().isoformat()
+                })
+
+    # Rerun to show all messages
     st.rerun()
 
+# Display chat messages (after input)
+if len(st.session_state.messages) > 0:
+    st.markdown("---")
+    st.markdown("### 💬 Conversation History")
+    st.markdown("<br>", unsafe_allow_html=True)
 
-# How it works section and footer (only show on initial page, below input)
-if len(st.session_state.messages) == 0 and not st.session_state.processing:
+    for idx, message in enumerate(st.session_state.messages):
+        role = message['role']
+        content = message['content']
+        timestamp = message.get('timestamp', '')
+        time_str = datetime.fromisoformat(timestamp).strftime('%I:%M:%S %p') if timestamp else ''
+
+        # Message styling based on role
+        if role == 'user':
+            message_class = 'user-message'
+            agent_icon = '👤 You'
+        elif role == 'researcher':
+            message_class = 'researcher-message'
+            agent_icon = '🔍 Researcher'
+        elif role == 'writer':
+            message_class = 'writer-message'
+            agent_icon = '✍️ Writer'
+        elif role == 'editor':
+            message_class = 'editor-message'
+            agent_icon = '✏️ Editor'
+        else:
+            message_class = 'user-message'
+            agent_icon = role
+
+        # Check if message has expandable content
+        has_details = message.get('details') or message.get('full_content')
+
+        # Create message bubble
+        st.markdown(f"""
+        <div class="chat-message {message_class}">
+            <div class="agent-name">{agent_icon} <span style="color: #999; font-size: 0.75rem; font-weight: normal;">{time_str}</span></div>
+            <div class="message-content">
+                {content}
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # Expandable details
+        if has_details or message.get('is_final'):
+            with st.expander("📄 View full content", expanded=message.get('is_final', False)):
+                st.markdown(message.get('full_content', content))
+
+                # Show additional details if available
+                if message.get('details'):
+                    st.markdown("---")
+                    st.markdown(message['details'])
+
+            # Download button for final report
+            if message.get('is_final') and message.get('report_content'):
+                st.download_button(
+                    label="📥 Download Report",
+                    data=message['report_content'],
+                    file_name=f"research_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md",
+                    mime="text/markdown",
+                    key=f"download_{idx}"
+                )
+
+# How it works section and footer (only show on initial page)
+if len(st.session_state.messages) == 0:
     st.markdown("<br><br>", unsafe_allow_html=True)
 
     # Center the button
