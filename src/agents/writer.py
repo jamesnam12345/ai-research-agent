@@ -65,8 +65,8 @@ class WriterAgent:
                 "draft_version": new_version,
                 "current_stage": "editing",
                 "messages": [{
-                    "role": "writer",
-                    "content": f"Completed draft version {new_version}"
+                    "role": "ai",
+                    "content": f"[Writer] Completed draft version {new_version}"
                 }]
             }
 
@@ -114,7 +114,7 @@ Write a comprehensive report based on these research findings."""
             draft = self.claude.generate(
                 system_prompt=system_prompt,
                 user_message=user_message,
-                max_tokens=8000,  # Longer output for full report
+                max_tokens=4000,  # Haiku supports max 4096
                 temperature=0.7
             )
 
@@ -171,7 +171,7 @@ Revise the report to address the editor's feedback and improve overall quality."
             revised = self.claude.generate(
                 system_prompt=system_prompt,
                 user_message=user_message,
-                max_tokens=8000,
+                max_tokens=4000,  # Haiku supports max 4096
                 temperature=0.7
             )
 

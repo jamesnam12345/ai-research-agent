@@ -79,8 +79,8 @@ class EditorAgent:
                     "current_stage": "writing",
                     "iteration_count": current_iteration + 1,
                     "messages": [{
-                        "role": "editor",
-                        "content": f"Revision required (score: {quality_score:.2f})"
+                        "role": "ai",
+                        "content": f"[Editor] Revision required (score: {quality_score:.2f})"
                     }]
                 }
             else:
@@ -89,14 +89,24 @@ class EditorAgent:
                 # Finalize report
                 final_report = self._polish_report(draft)
 
+                # Fallback: if polish failed and returned empty, use draft
+                if not final_report or len(final_report.strip()) == 0:
+                    logger.warning("Polished report is empty, using draft as fallback")
+                    final_report = draft
+
+                # Last resort: if draft is also empty, create a basic report
+                if not final_report or len(final_report.strip()) == 0:
+                    logger.error("Both polished and draft reports are empty!")
+                    final_report = f"# Research Report\n\nError: Report generation failed. No content available.\n\nTopic: {topic}"
+
                 return {
                     "final_report": final_report,
                     "quality_score": quality_score,
                     "requires_revision": False,
                     "current_stage": "complete",
                     "messages": [{
-                        "role": "editor",
-                        "content": f"Report finalized (score: {quality_score:.2f})"
+                        "role": "ai",
+                        "content": f"[Editor] Report finalized (score: {quality_score:.2f})"
                     }]
                 }
 
@@ -213,7 +223,7 @@ Keep the content and structure largely unchanged. This is just a light polish, n
                 system_prompt=system_prompt,
                 user_message=user_message,
                 temperature=0.3,  # Low temperature for consistency
-                max_tokens=8000
+                max_tokens=4000  # Haiku supports max 4096
             )
 
             return polished

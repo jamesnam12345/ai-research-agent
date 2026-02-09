@@ -1,8 +1,7 @@
 """
-Multi-Agent Research System - Streamlit Application
+Multi-Agent Research System - Chat Interface
 
-A research application powered by LangGraph, Claude (Anthropic), and Tavily Search.
-Three specialized agents work together to produce comprehensive research reports.
+A clean, chat-style research application with three AI agents.
 """
 
 import streamlit as st
@@ -17,142 +16,352 @@ import sys
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(sys.stdout)
-    ]
+    handlers=[logging.StreamHandler(sys.stdout)]
 )
 logger = logging.getLogger(__name__)
 
 # Page configuration
 st.set_page_config(
-    page_title="AI Research Agent",
+    page_title="Multi-Agent Research System",
     page_icon="🔬",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    layout="centered",
+    initial_sidebar_state="collapsed"
 )
 
-# Custom CSS for better styling
+# Custom CSS for chat-style interface
 st.markdown("""
 <style>
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 8px;
+    /* Hide Streamlit branding */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+
+    /* Remove default Streamlit padding */
+    .block-container {
+        padding-top: 3rem;
     }
-    .stTabs [data-baseweb="tab"] {
-        padding: 10px 20px;
+
+    /* Center title */
+    .main-title {
+        text-align: center;
+        font-size: 2.5rem;
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+        color: #1f1f1f;
     }
-    .success-box {
+
+    .subtitle {
+        text-align: center;
+        color: #666;
+        margin-bottom: 2rem;
+        font-size: 1rem;
+    }
+
+    /* Remove textarea border */
+    .stTextArea textarea {
+        border: none !important;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1) !important;
+    }
+
+    /* Hide form border */
+    .stForm {
+        border: none !important;
+    }
+
+    /* Chat messages */
+    .chat-message {
         padding: 1rem;
         border-radius: 0.5rem;
-        background-color: #d4edda;
-        border: 1px solid #c3e6cb;
-        color: #155724;
+        margin-bottom: 1rem;
+        animation: fadeIn 0.3s ease-in;
+    }
+
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    .user-message {
+        background-color: #e3f2fd;
+        border-left: 4px solid #2196f3;
+    }
+
+    .researcher-message {
+        background-color: #f3e5f5;
+        border-left: 4px solid #9c27b0;
+    }
+
+    .writer-message {
+        background-color: #fff3e0;
+        border-left: 4px solid #ff9800;
+    }
+
+    .editor-message {
+        background-color: #e8f5e9;
+        border-left: 4px solid #4caf50;
+    }
+
+    .agent-name {
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+        font-size: 0.9rem;
+    }
+
+    .message-content {
+        color: #333;
+    }
+
+    /* Footer */
+    .custom-footer {
+        text-align: center;
+        color: #999;
+        font-size: 0.85rem;
+        margin-top: 3rem;
+        padding: 1rem;
+    }
+
+    /* Center button container */
+    .button-container {
+        display: flex;
+        justify-content: center;
+        gap: 0.5rem;
+        margin-top: 1rem;
+    }
+
+    /* Make Go button bigger */
+    button[kind="primary"] {
+        font-size: 1.1rem !important;
+        padding: 0.75rem 2rem !important;
+        font-weight: 600 !important;
+    }
+
+    /* Remove border from popover button */
+    button[data-testid="baseButton-secondary"] {
+        border: none !important;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# Title and description
-st.title("🔬 Multi-Agent Research System")
-st.markdown("""
-This AI research system uses three specialized agents to produce comprehensive research reports:
-- **🔍 Researcher**: Searches the web using Tavily and gathers information
-- **✍️ Writer**: Drafts comprehensive reports from research findings
-- **✏️ Editor**: Reviews quality and refines the final report
+# Initialize session state
+if 'messages' not in st.session_state:
+    st.session_state.messages = []
 
-Powered by **LangGraph**, **Claude (Anthropic)**, and **Tavily Search**.
-""")
+if 'processing' not in st.session_state:
+    st.session_state.processing = False
 
-st.divider()
-
-
-# Initialize workflow (cached for performance)
-@st.cache_resource
-def get_workflow():
-    """Initialize and cache the LangGraph workflow."""
+if 'workflow' not in st.session_state:
     try:
-        logger.info("Initializing workflow")
-        workflow = create_research_workflow()
-        return workflow
+        st.session_state.workflow = create_research_workflow()
     except Exception as e:
-        logger.error(f"Failed to initialize workflow: {str(e)}")
         st.error(f"Failed to initialize workflow: {str(e)}")
-        return None
+        st.session_state.workflow = None
 
+if 'show_config' not in st.session_state:
+    st.session_state.show_config = False
 
-# Sidebar configuration
-with st.sidebar:
-    st.header("⚙️ Configuration")
+if 'show_how_it_works' not in st.session_state:
+    st.session_state.show_how_it_works = False
 
-    st.markdown("### Workflow Settings")
+# Initialize config values
+if 'max_iterations' not in st.session_state:
+    st.session_state.max_iterations = settings.MAX_REVISION_ITERATIONS
 
-    max_iterations = st.slider(
-        "Max Revision Iterations",
-        min_value=1,
-        max_value=5,
-        value=settings.MAX_REVISION_ITERATIONS,
-        help="Maximum number of times the editor can request revisions"
+if 'quality_threshold' not in st.session_state:
+    st.session_state.quality_threshold = settings.QUALITY_THRESHOLD
+
+if 'selected_model' not in st.session_state:
+    st.session_state.selected_model = settings.CLAUDE_MODEL
+
+if 'workflow_started' not in st.session_state:
+    st.session_state.workflow_started = False
+
+# Always show title and subtitle at top
+st.markdown('<h1 class="main-title">Multi-Agent Research System</h1>', unsafe_allow_html=True)
+st.markdown('<p class="subtitle">Research any topic of your interest with the help of three specialized agents (researcher, writer, editor)</p>', unsafe_allow_html=True)
+st.markdown("<br>", unsafe_allow_html=True)
+
+# Show configuration panel if toggled (before input)
+if st.session_state.show_config:
+    with st.container():
+        st.markdown("**⚙️ Configuration**")
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.session_state.selected_model = st.selectbox(
+                "Claude Model",
+                options=[
+                    "claude-3-haiku-20240307",
+                    "claude-3-5-sonnet-20241022",
+                    "claude-opus-4-6"
+                ],
+                index=["claude-3-haiku-20240307", "claude-3-5-sonnet-20241022", "claude-opus-4-6"].index(
+                    st.session_state.selected_model
+                ) if st.session_state.selected_model in ["claude-3-haiku-20240307", "claude-3-5-sonnet-20241022", "claude-opus-4-6"] else 0,
+                help="Choose the Claude model to use",
+                key="model_selector"
+            )
+
+        with col2:
+            st.session_state.max_iterations = st.slider(
+                "Max Revision Iterations",
+                min_value=1,
+                max_value=5,
+                value=st.session_state.max_iterations,
+                help="Maximum number of revision cycles",
+                key="max_iter_slider"
+            )
+
+        st.session_state.quality_threshold = st.slider(
+            "Quality Threshold",
+            min_value=0.0,
+            max_value=1.0,
+            value=st.session_state.quality_threshold,
+            step=0.05,
+            help="Minimum quality score to finalize report",
+            key="quality_slider"
+        )
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+# Input area - show this BEFORE messages
+with st.form(key='research_form', clear_on_submit=False):
+    user_input = st.text_area(
+        "Research Topic",
+        placeholder="Enter your research topic (e.g., 'Latest developments in quantum computing')",
+        height=100,
+        disabled=st.session_state.processing,
+        label_visibility="collapsed"
     )
 
-    quality_threshold = st.slider(
-        "Quality Threshold",
-        min_value=0.0,
-        max_value=1.0,
-        value=settings.QUALITY_THRESHOLD,
-        step=0.05,
-        help="Minimum quality score (0-1) required to finalize the report"
-    )
+    # Buttons in same row - config gear on left, Go on right
+    col1, col2, col3 = st.columns([1, 4, 1])
 
-    st.divider()
+    with col1:
+        config_button = st.form_submit_button(
+            "⚙️",
+            help="Configuration",
+            disabled=st.session_state.processing
+        )
 
-    st.markdown("### About the Agents")
+    with col3:
+        submit_button = st.form_submit_button(
+            "Go",
+            type="primary",
+            disabled=st.session_state.processing,
+            use_container_width=True
+        )
 
+st.markdown("<br>", unsafe_allow_html=True)
+
+# Show prominent running indicator when processing
+if st.session_state.processing:
     st.markdown("""
-    **🔍 Researcher Agent**
-    - Generates diverse search queries
-    - Searches web using Tavily API
-    - Consolidates findings into notes
+    <div style="text-align: center; padding: 1.5rem; background: linear-gradient(90deg, #e3f2fd 0%, #f3e5f5 50%, #fff3e0 100%); border-radius: 0.5rem; margin-bottom: 1rem;">
+        <div style="font-size: 1.2rem; font-weight: 600; color: #1976d2; margin-bottom: 0.5rem;">
+            🔄 RUNNING
+        </div>
+        <div style="color: #666; font-size: 0.9rem;">
+            Multi-agent research in progress... Please wait.
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
-    **✍️ Writer Agent**
-    - Drafts comprehensive reports
-    - Handles revision requests
-    - Maintains professional tone
+# Display chat messages with expandable details (AFTER input)
+if len(st.session_state.messages) > 0:
+    st.markdown("---")
+    st.markdown("### 💬 Conversation History")
+    st.markdown("<br>", unsafe_allow_html=True)
 
-    **✏️ Editor Agent**
-    - Assesses report quality
-    - Provides constructive feedback
-    - Decides on revisions vs. approval
-    """)
+for idx, message in enumerate(st.session_state.messages):
+    role = message['role']
+    content = message['content']
+    timestamp = message.get('timestamp', '')
+    time_str = datetime.fromisoformat(timestamp).strftime('%I:%M:%S %p') if timestamp else ''
 
-    st.divider()
+    # Message styling based on role
+    if role == 'user':
+        message_class = 'user-message'
+        agent_icon = '👤 You'
+    elif role == 'researcher':
+        message_class = 'researcher-message'
+        agent_icon = '🔍 Researcher'
+    elif role == 'writer':
+        message_class = 'writer-message'
+        agent_icon = '✍️ Writer'
+    elif role == 'editor':
+        message_class = 'editor-message'
+        agent_icon = '✏️ Editor'
+    else:
+        message_class = 'user-message'
+        agent_icon = role
 
-    st.markdown("### System Info")
-    st.caption(f"Model: {settings.CLAUDE_MODEL}")
-    st.caption(f"Max Search Results: {settings.MAX_SEARCH_RESULTS}")
-    st.caption(f"Temperature: {settings.CLAUDE_TEMPERATURE}")
+    # Check if message has expandable content
+    has_details = message.get('details') or message.get('full_content')
 
-# Main interface
-st.header("Start Research")
+    # Create message bubble - all content must be rendered as a single block
+    st.markdown(f"""
+    <div class="chat-message {message_class}">
+        <div class="agent-name">{agent_icon} <span style="color: #999; font-size: 0.75rem; font-weight: normal;">{time_str}</span></div>
+        <div class="message-content">
+            {content}
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
-topic = st.text_input(
-    "Research Topic",
-    placeholder="e.g., 'Latest developments in quantum computing' or 'Climate change impact on agriculture'",
-    help="Enter any topic you want to research comprehensively",
-    key="topic_input"
-)
+    # Expandable details rendered separately (outside the bubble for proper Streamlit widget support)
+    if has_details or message.get('is_final'):
+        with st.expander("📄 View full content", expanded=message.get('is_final', False)):
+            st.markdown(message.get('full_content', content))
 
-col1, col2 = st.columns([1, 5])
-with col1:
-    start_button = st.button("🚀 Start Research", type="primary", disabled=not topic)
-with col2:
-    if not topic:
-        st.caption("Enter a research topic above to begin")
+            # Show additional details if available
+            if message.get('details'):
+                st.markdown("---")
+                st.markdown(message['details'])
 
-# Execute research workflow
-if start_button and topic:
-    st.divider()
+        # If this is the final message with a report, add download button
+        if message.get('is_final') and message.get('report_content'):
+            st.download_button(
+                label="📥 Download Report",
+                data=message['report_content'],
+                file_name=f"research_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md",
+                mime="text/markdown",
+                key=f"download_{idx}"
+            )
+
+# Handle config button
+if config_button:
+    st.session_state.show_config = not st.session_state.show_config
+    st.rerun()
+
+# Process research request
+if submit_button and user_input and not st.session_state.processing:
+    st.session_state.processing = True
+    st.session_state.workflow_started = False
+
+    # Add user message
+    st.session_state.messages.append({
+        'role': 'user',
+        'content': user_input,
+        'timestamp': datetime.now().isoformat()
+    })
+
+    # Force UI refresh to show user message and disabled inputs
+    st.rerun()
+
+# Continue workflow if processing and not already started
+if st.session_state.processing and not st.session_state.workflow_started and len(st.session_state.messages) > 0:
+    st.session_state.workflow_started = True
+    # Get the user's topic from the last user message
+    user_message = [m for m in st.session_state.messages if m['role'] == 'user'][-1]
+    user_input = user_message['content']
+
+    # Update settings with selected model
+    import os
+    os.environ['CLAUDE_MODEL'] = st.session_state.selected_model
 
     # Initialize state
     initial_state: ResearchState = {
-        "topic": topic,
+        "topic": user_input,
         "search_queries": [],
         "search_results": [],
         "research_notes": "",
@@ -163,177 +372,176 @@ if start_button and topic:
         "quality_score": 0.0,
         "current_stage": "research",
         "iteration_count": 0,
-        "max_iterations": max_iterations,
-        "quality_threshold": quality_threshold,
+        "max_iterations": st.session_state.max_iterations,
+        "quality_threshold": st.session_state.quality_threshold,
         "requires_revision": False,
         "messages": [],
         "timestamp": datetime.now().isoformat(),
         "error": None
     }
 
-    # Create progress containers
-    progress_container = st.container()
-    with progress_container:
-        progress_bar = st.progress(0, text="Initializing workflow...")
-        status_placeholder = st.empty()
-
-    # Create tabs for output
-    tab1, tab2, tab3, tab4 = st.tabs([
-        "📊 Progress",
-        "📝 Research Notes",
-        "📄 Draft Report",
-        "✅ Final Report"
-    ])
-
-    # Get workflow
-    workflow = get_workflow()
+    # Execute workflow
+    workflow = st.session_state.workflow
 
     if workflow is None:
-        st.error("Failed to initialize workflow. Please check your configuration and API keys.")
+        st.error("Workflow not initialized. Please refresh the page.")
+        st.session_state.processing = False
     else:
         try:
-            logger.info(f"Starting research workflow for topic: '{topic}'")
-
-            # Execute workflow
-            final_state = None
-            stage_progress = {
-                "research": 0.25,
-                "writing": 0.50,
-                "editing": 0.75,
-                "complete": 1.0
-            }
+            # Track which agents have reported and store messages to add after completion
+            agents_reported = set()
+            pending_messages = []
 
             # Stream workflow execution
             for event in workflow.stream(initial_state):
-                logger.info(f"Workflow event: {event}")
-
-                # Get current state from event
-                # LangGraph stream returns dict with node name as key
                 for node_name, node_state in event.items():
                     if isinstance(node_state, dict):
-                        # Update progress based on stage
                         stage = node_state.get('current_stage', 'research')
-                        progress = stage_progress.get(stage, 0.25)
 
-                        # Update progress bar with stage-specific text
-                        if stage == 'research':
-                            progress_bar.progress(progress, text="🔍 Researcher agent gathering information...")
-                        elif stage == 'writing':
-                            progress_bar.progress(progress, text="✍️ Writer agent drafting report...")
-                        elif stage == 'editing':
-                            progress_bar.progress(progress, text="✏️ Editor agent reviewing quality...")
-                        elif stage == 'complete':
-                            progress_bar.progress(progress, text="✅ Research complete!")
-                        elif stage == 'failed':
-                            progress_bar.progress(0, text="❌ Workflow failed")
+                        # Researcher agent messages
+                        if node_name == 'researcher':
+                            if 'researcher_start' not in agents_reported:
+                                pending_messages.append({
+                                    'role': 'researcher',
+                                    'content': '🔍 Starting web research...',
+                                    'timestamp': datetime.now().isoformat()
+                                })
+                                agents_reported.add('researcher_start')
 
-                        # Display status updates
-                        iteration = node_state.get('iteration_count', 0)
-                        if iteration > 0:
-                            status_placeholder.info(f"📝 Revision cycle {iteration}/{max_iterations}")
+                            if 'researcher_complete' not in agents_reported:
+                                queries = len(node_state.get('search_queries', []))
+                                results = len(node_state.get('search_results', []))
+                                notes = node_state.get('research_notes', '')
 
-                        # Update Progress tab
-                        with tab1:
-                            st.subheader("Workflow Status")
+                                pending_messages.append({
+                                    'role': 'researcher',
+                                    'content': f'✅ Research complete! Found {results} sources from {queries} queries.',
+                                    'timestamp': datetime.now().isoformat(),
+                                    'details': f"**Research Notes:**\n\n{notes[:500]}..." if len(notes) > 500 else notes,
+                                    'full_content': notes
+                                })
+                                agents_reported.add('researcher_complete')
 
-                            col1, col2, col3 = st.columns(3)
-                            with col1:
-                                st.metric("Current Stage", stage.title())
-                            with col2:
-                                st.metric("Draft Version", node_state.get('draft_version', 0))
-                            with col3:
-                                score = node_state.get('quality_score', 0.0)
-                                st.metric("Quality Score", f"{score:.2f}")
+                        # Writer agent messages
+                        elif node_name == 'writer':
+                            version = node_state.get('draft_version', 0)
 
-                            st.subheader("Search Summary")
-                            num_queries = len(node_state.get('search_queries', []))
-                            num_results = len(node_state.get('search_results', []))
+                            if f'writer_start_{version}' not in agents_reported:
+                                pending_messages.append({
+                                    'role': 'writer',
+                                    'content': f'✍️ Writing report (version {version})...',
+                                    'timestamp': datetime.now().isoformat()
+                                })
+                                agents_reported.add(f'writer_start_{version}')
 
-                            col1, col2 = st.columns(2)
-                            with col1:
-                                st.metric("Queries Executed", num_queries)
-                            with col2:
-                                st.metric("Sources Found", num_results)
+                            if f'writer_complete_{version}' not in agents_reported and node_state.get('draft_report'):
+                                draft = node_state.get('draft_report', '')
 
-                            # Display search queries
-                            if num_queries > 0:
-                                with st.expander("View Search Queries"):
-                                    for i, query in enumerate(node_state.get('search_queries', []), 1):
-                                        st.write(f"{i}. {query}")
+                                pending_messages.append({
+                                    'role': 'writer',
+                                    'content': f'✅ Draft version {version} complete!',
+                                    'timestamp': datetime.now().isoformat(),
+                                    'details': f"**Draft Report:**\n\n{draft[:500]}..." if len(draft) > 500 else draft,
+                                    'full_content': draft
+                                })
+                                agents_reported.add(f'writer_complete_{version}')
 
-                        # Update Research Notes tab
-                        with tab2:
-                            notes = node_state.get('research_notes', '')
-                            if notes:
-                                st.markdown(notes)
-                            else:
-                                st.info("Research notes will appear here once the researcher completes...")
+                        # Editor agent messages
+                        elif node_name == 'editor':
+                            if 'editor_reviewing' not in agents_reported:
+                                pending_messages.append({
+                                    'role': 'editor',
+                                    'content': '✏️ Reviewing report quality...',
+                                    'timestamp': datetime.now().isoformat()
+                                })
+                                agents_reported.add('editor_reviewing')
 
-                        # Update Draft Report tab
-                        with tab3:
-                            draft = node_state.get('draft_report', '')
-                            if draft:
-                                st.markdown(draft)
-
-                                # Show editor feedback if available
+                            if node_state.get('requires_revision'):
+                                iteration = node_state.get('iteration_count', 0)
+                                score = node_state.get('quality_score', 0)
                                 feedback = node_state.get('editor_feedback', '')
-                                if feedback and node_state.get('requires_revision'):
-                                    st.warning("**Editor Feedback:**")
-                                    st.markdown(feedback)
-                            else:
-                                st.info("Draft report will appear here once the writer completes...")
 
-                        # Store latest state
-                        final_state = node_state
+                                pending_messages.append({
+                                    'role': 'editor',
+                                    'content': f'🔄 Requesting revision (iteration {iteration}/{st.session_state.max_iterations})',
+                                    'timestamp': datetime.now().isoformat(),
+                                    'details': f"**Quality Score:** {score:.2f}\n\n**Feedback:**\n{feedback}"
+                                })
+                                agents_reported.remove('editor_reviewing')  # Allow editor to send another message
 
-            # Display final report
-            if final_state and final_state.get('current_stage') == 'complete':
-                with tab4:
-                    st.success(f"✅ Report completed with quality score: {final_state['quality_score']:.2f}")
+                            elif stage == 'complete':
+                                # Final report ready
+                                final_report = node_state.get('final_report', '')
+                                score = node_state.get('quality_score', 0)
 
-                    final_report = final_state.get('final_report', '')
-                    st.markdown(final_report)
+                                if final_report:
+                                    pending_messages.append({
+                                        'role': 'editor',
+                                        'content': f'✅ Research Complete! Quality score: {score:.2f}',
+                                        'timestamp': datetime.now().isoformat(),
+                                        'is_final': True,
+                                        'full_content': final_report,
+                                        'report_content': final_report
+                                    })
+                                else:
+                                    pending_messages.append({
+                                        'role': 'editor',
+                                        'content': f'⚠️ Research completed but report content is empty. Quality score: {score:.2f}',
+                                        'timestamp': datetime.now().isoformat()
+                                    })
 
-                    # Download button
-                    if final_report:
-                        st.download_button(
-                            label="📥 Download Report (Markdown)",
-                            data=final_report,
-                            file_name=f"research_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md",
-                            mime="text/markdown",
-                            use_container_width=True
-                        )
+            # Add all pending messages to session state
+            st.session_state.messages.extend(pending_messages)
 
-                # Display agent communication log
-                with st.expander("📜 Agent Communication Log"):
-                    messages = final_state.get('messages', [])
-                    if messages:
-                        for msg in messages:
-                            role = msg.get('role', 'system')
-                            content = msg.get('content', '')
-                            st.text(f"[{role.upper()}] {content}")
-                    else:
-                        st.caption("No messages logged")
-
-            elif final_state and final_state.get('error'):
-                st.error(f"❌ Workflow failed: {final_state['error']}")
-                with tab1:
-                    st.error(f"Error: {final_state['error']}")
-
-            logger.info("Research workflow completed")
+            logger.info("Research workflow completed successfully")
 
         except Exception as e:
             logger.exception("Workflow execution failed")
-            st.error(f"❌ An error occurred during research: {str(e)}")
+            st.session_state.messages.append({
+                'role': 'editor',
+                'content': f"❌ Error during research: {str(e)}",
+                'timestamp': datetime.now().isoformat()
+            })
 
-            with st.expander("Error Details"):
-                st.code(str(e))
+    st.session_state.processing = False
+    st.rerun()
 
-# Footer
-st.divider()
-st.markdown("""
-<div style='text-align: center; color: gray; padding: 20px;'>
-    Built with <b>LangGraph</b>, <b>Claude (Anthropic)</b>, and <b>Tavily Search</b><br>
-    Multi-Agent Research System © 2026
-</div>
-""", unsafe_allow_html=True)
+
+# How it works section and footer (only show on initial page, below input)
+if len(st.session_state.messages) == 0 and not st.session_state.processing:
+    st.markdown("<br><br>", unsafe_allow_html=True)
+
+    # Center the button
+    col1, col2, col3 = st.columns([3, 2, 3])
+    with col2:
+        if st.button("💡 How it works", help="Learn about the multi-agent system"):
+            st.session_state.show_how_it_works = not st.session_state.show_how_it_works
+
+    if st.session_state.show_how_it_works:
+        st.markdown("""
+        <div style="padding: 1rem; margin-top: 1rem;">
+        <p>This AI research system uses <strong>three specialized agents</strong> that work together:</p>
+
+        <p><strong>🔍 Researcher Agent</strong><br>
+        • Generates diverse search queries for comprehensive coverage<br>
+        • Searches the web using Tavily API<br>
+        • Consolidates findings into structured research notes</p>
+
+        <p><strong>✍️ Writer Agent</strong><br>
+        • Transforms research notes into comprehensive reports<br>
+        • Creates well-structured content with executive summary, findings, and analysis<br>
+        • Handles revision requests from the Editor</p>
+
+        <p><strong>✏️ Editor Agent</strong><br>
+        • Assesses report quality on multiple criteria<br>
+        • Provides constructive feedback for improvements<br>
+        • Decides whether to approve or request revisions<br>
+        • Performs final polish on approved reports</p>
+
+        <p style="color: #666; font-size: 0.9rem;">The workflow uses <strong>LangGraph</strong> for orchestration, <strong>Claude (Anthropic)</strong> for intelligence,
+        and <strong>Tavily</strong> for web search. Quality thresholds and iteration limits ensure high-quality output.</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown('<div class="custom-footer">Built with LangGraph, Claude (Anthropic), and Tavily Search by James N., for demo purpose</div>',
+                unsafe_allow_html=True)

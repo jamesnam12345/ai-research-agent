@@ -2,6 +2,7 @@
 Researcher Agent: Searches web using Tavily and consolidates findings.
 """
 
+from typing import List
 from src.graph.state import ResearchState
 from src.tools.tavily_search import TavilySearchTool
 from src.tools.claude_utils import ClaudeClient
@@ -70,8 +71,8 @@ class ResearcherAgent:
                 "research_notes": research_notes,
                 "current_stage": "writing",
                 "messages": [{
-                    "role": "researcher",
-                    "content": f"Completed research with {len(all_results)} sources"
+                    "role": "ai",
+                    "content": f"[Researcher] Completed research with {len(all_results)} sources"
                 }]
             }
 
@@ -171,7 +172,3 @@ Consolidate these findings into clear, well-organized research notes."""
             logger.error(f"Consolidation failed: {str(e)}")
             # Fallback: return basic formatted results
             return f"# Research Notes for: {topic}\n\nError during consolidation. Raw results:\n\n{results_text}"
-
-
-# Import List type
-from typing import List
